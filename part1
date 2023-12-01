@@ -1,0 +1,230 @@
+# Отбор числовых признаков
+numeric_f = ['na_sales', 'eu_sales', 'other_sales']
+# Отбор категориальных признаков
+categorical_f = ['platform', 'genre', 'publisher']
+encoder = OneHotEncoder(sparse_output=False)
+#числовые и закодированные категориальные признаки
+x = np.hstack((data[numeric_f].values, encoder.fit_transform(data[categorical_f])))Y = data['jp_sales'].values
+Y
+# Разделение данных на обучающую и тестовую выборки
+x_train, x_test, Y_train, Y_test = train_test_split(x, Y, test_size=0.7, random_state=42)
+display(x_train.shape, x_test.shape)
+class LinearRegressionGD:
+    def __init__(self, lr=0.01, max_iter=1000, tol=1e-3, intercept = True):
+        # скорость обучения градиентного спуска
+        self.learning_rate = lr
+        # максимальное число итераций
+        self.max_iteration = max_iter
+        # критерий сходимости
+        self.tolerance_convergence  = tol
+        # наличие свободного члена
+        self.intercept = intercept
+        # инициальзация весов: None
+        self.theta = None
+        self.n = None
+        self.d = None
+
+
+    def fit(self, X, y):
+        self.X = X.copy()
+        if self.intercept:
+            self.X = np.hstack((np.ones((self.X.shape[0], 1)), self.X))
+        # размерность вектора X
+        self.n, self.d = self.X.shape
+        # инициализация случайных весов
+        self.theta = np.random.randn(self.d)
+        steps, errors = [], []
+        step = 0
+        for _ in range(self.max_iteration):
+            grad = self.gradient(self.X, y)
+            self.theta -= self.learning_rate * grad
+            new_error = ((y - self.predict(X)).T @ (y - self.predict(X))) / self.n
+            step += 1
+            steps.append(step)
+            errors.append(new_error)
+            # проверка сходимости
+            if np.linalg.norm(grad) < self.tolerance_convergence:
+                break
+        return steps, errors
+
+    def gradient(self, X, y):
+        return X.T @ (X @ self.theta - y) / len(y)
+
+    def predict(self, X):
+        if self.intercept:
+            X_ = np.hstack((np.ones((X.shape[0],1)), X))
+        else:
+            X_ = X
+        return X_ @ self.theta
+
+    def MSE(self, X, y):
+        return ((y - self.predict(X)).T @ (y - self.predict(X))) / len(y)
+
+    def MAE(self, X, y):
+        return abs(y - self.predict(X)).mean()
+
+    def MAPE(self, X, y):
+        return abs((y - self.predict(X))/y).mean()
+%%time
+regr_MR = LinearRegressionGD()
+steps_MR_train, errors_MR_train = regr_MR.fit(x_train, Y_train)
+%%time
+steps_MR_test, errors_MR_test = regr_MR.fit(x_test, Y_test)
+#выводим результаты для LinearRegressionGD
+print(f'train MSE: {regr_MR.MSE(x_train, Y_train)}')
+print(f'test MSE: {regr_MR.MSE(x_test, Y_test)}')
+
+sns.lineplot(x=steps_MR_train, y=errors_MR_train, label='train_loss_MR', color='g')
+sns.lineplot(x=steps_MR_train, y=errors_MR_test, label='test_loss_MR')
+class LinearRegressionSGD:
+    def __init__(self, lr=0.01, max_iter=1000, batch_size=32, tol=1e-3, intercept = True):
+        # скорость обучения градиентного спуска
+        self.learning_rate = lr
+        # максимальное число итераций
+        self.max_iteration = max_iter
+        # размер мини-батча
+        self.batch_size = batch_size
+        # критерий сходимости
+        self.tolerance_convergence  = tol
+        # наличие свободного члена
+        self.intercept = intercept
+        # инициальзация весов: None
+        self.theta = None
+        self.n = None
+        self.d = None
+
+    def fit(self, X, y):
+        self.X = X.copy()
+        self.y = y.copy()
+        if self.intercept:
+            self.X = np.hstack((np.ones((self.X.shape[0], 1)), self.X))
+        # размерность вектора X
+        self.n, self.d = self.X.shape
+        # инициализация случайных весов
+        self.theta = np.random.randn(self.d)
+        steps, errors = [], []
+        step = 0
+        for _ in range(self.max_iteration):
+            # перемешивание данных
+            indices = np.random.permutation(self.n)
+            X = self.X[indices]
+            y = self.y[indices]
+            # цикл по мини-батчам
+            for i in range(0, self.n, self.batch_size):
+                X_batch = X[i:i+self.batch_size]
+                y_batch = y[i:i+self.batch_size]
+                grad = self.gradient(X_batch, y_batch)
+                self.theta -= self.learning_rate * grad
+            new_error = ((self.y - self.X @ self.theta).T @ (self.y - self.X @ self.theta)) / self.n
+            step += 1
+            steps.append(step)
+            errors.append(new_error)
+            # проверка сходимости
+            if np.linalg.norm(grad) < self.tolerance_convergence:
+                break
+        return steps, errors
+
+    def gradient(self, X, y):
+
+        return X.T @ (X @ self.theta - y) / len(y)
+
+    def predict(self, X):
+        if self.intercept:
+            X_ = np.hstack((np.ones((X.shape[0],1)), X))
+        else:
+            X_ = X
+        return X_ @ self.theta
+
+    def MSE(self, X, y):
+        return ((y - self.predict(X)).T @ (y - self.predict(X))) / len(y)
+
+    def MAE(self, X, y):
+        return abs(y - self.predict(X)).mean()
+
+    def MAPE(self, X, y):
+        return abs((y - self.predict(X))/y).mean()
+regr_SGD = LinearRegressionSGD(lr=0.01, max_iter=1000, batch_size=64, tol=1e-3, intercept = True)
+%%time
+steps_SGD_train, errors_SGD_train = regr_SGD.fit(x_train, Y_train)
+%%time
+steps_SGD_test, errors_SGD_test = regr_SGD.fit(x_test, Y_test)
+#выводим результаты для LinearRegressionSGD
+print(f'train MSE: {regr_SGD.MSE(x_train, Y_train)}')
+print(f'test MSE: {regr_SGD.MSE(x_test, Y_test)}')
+
+sns.lineplot(x=steps_SGD_train, y=errors_SGD_train, label='train_loss_SGD', color='g')
+sns.lineplot(x=steps_SGD_test, y=errors_SGD_test, label='test_loss_SGD')
+class LinearRegressionADAM:
+    def __init__(self, lr=0.01, max_iter=1000, tol=1e-3, intercept=True, beta1=0.9, beta2=0.999, epsilon=1e-8):
+        self.learning_rate = lr
+        self.max_iteration = max_iter
+        self.tolerance_convergence = tol
+        self.intercept = intercept
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.epsilon = epsilon
+        self.theta = None
+
+    def fit(self, X, y):
+        if self.intercept:
+            X = np.hstack((np.ones((X.shape[0], 1)), X))
+
+        n, d = X.shape
+        self.theta = np.random.randn(d)
+
+        m = np.zeros_like(self.theta)
+        v = np.zeros_like(self.theta)
+
+        steps, errors = [], []
+        step = 0
+
+        for _ in range(self.max_iteration):
+            grad = X.T @ (X @ self.theta - y) / n
+
+            m = self.beta1 * m + (1 - self.beta1) * grad
+            v = self.beta2 * v + (1 - self.beta2) * (grad ** 2)
+
+            m_hat = m / (1 - self.beta1 ** (step + 1))
+            v_hat = v / (1 - self.beta2 ** (step + 1))
+
+            self.theta -= self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
+
+            new_error = ((y - X @ self.theta).T @ (y - X @ self.theta)) / n
+            step += 1
+            steps.append(step)
+            errors.append(new_error)
+
+            if np.linalg.norm(grad) < self.tolerance_convergence:
+                break
+
+        return steps, errors
+
+    def predict(self, X):
+        if self.intercept:
+            X = np.hstack((np.ones((X.shape[0], 1)), X))
+        return X @ self.theta
+
+    def MSE(self, X, y):
+        return ((y - self.predict(X)).T @ (y - self.predict(X))) / n
+regr_Adam = LinearRegressionADAM()
+%%time
+steps_Adam_train, errors_Adam_train = regr_Adam.fit(x_train, Y_train)
+%%time
+steps_Adam_test, errors_Adam_test = regr_Adam.fit(x_test, Y_test)
+#выводим результаты для MultipleRegressionADAM
+print(f'train MSE: {regr_SGD.MSE(x_train, Y_train)}')
+print(f'test MSE: {regr_SGD.MSE(x_test, Y_test)}')
+
+sns.lineplot(x=steps_Adam_train, y=errors_Adam_train, label='train_loss_Adam', color='g')
+sns.lineplot(x=steps_Adam_test, y=errors_Adam_test, label='test_loss_Adam')
+fig = plt.figure()
+ax = fig.add_subplot()
+ax.set_title('Сравнение классов')
+sns.lineplot(x=steps_MR_train, y=errors_MR_train, label='train_loss_MR', color='g')
+sns.lineplot(x=steps_MR_train, y=errors_MR_test, label='test_loss_MR', color='pink')
+
+sns.lineplot(x=steps_SGD_train, y=errors_SGD_train, label='train_loss_SGD', color='r')
+sns.lineplot(x=steps_SGD_test, y=errors_SGD_test, label='test_loss_SGD', color='grey')
+
+sns.lineplot(x=steps_Adam_train, y=errors_Adam_train, label='train_loss_Adam', color='y')
+sns.lineplot(x=steps_Adam_test, y=errors_Adam_test, label='test_loss_Adam', color='b')
